@@ -29,11 +29,11 @@ Shopify.Context.initialize({
 // Storing the currently active shops in memory will force them to re-login when your server restarts. You should
 // persist this object in your app.
 const ACTIVE_SHOPIFY_SHOPS = {};
+const server = new Koa();
+const router = new Router();
+server.keys = [Shopify.Context.API_SECRET_KEY];
 
 app.prepare().then(async () => {
-  const server = new Koa();
-  const router = new Router();
-  server.keys = [Shopify.Context.API_SECRET_KEY];
   server.use(
     createShopifyAuth({
       async afterAuth(ctx) {
@@ -41,6 +41,7 @@ app.prepare().then(async () => {
         const { shop, accessToken, scope } = ctx.state.shopify;
         console.log("Angelique accessToken " + accessToken);
         const host = ctx.query.host;
+        console.log("the host is " + ctx.query.host);
         ACTIVE_SHOPIFY_SHOPS[shop] = scope;
 
         const response = await Shopify.Webhooks.Registry.register({
@@ -57,13 +58,19 @@ app.prepare().then(async () => {
             `Failed to register APP_UNINSTALLED webhook: ${response.result}`
           );
         }
-        /* if (ACTIVE_SHOPIFY_SHOPS[shop]) {
-          ctx.redirect(`https://?shop=${shop}/admin/app`);
+        console.log(
+          "should run first" +
+            shop +
+            "ACTIVESHOP " +
+            JSON.stringify(ACTIVE_SHOPIFY_SHOPS)
+        );
+        if (ACTIVE_SHOPIFY_SHOPS[shop]) {
+          ctx.redirect(`/?shop=${shop}&host=${host}`);
         } else {
           ctx.redirect(`/?shop=${shop}`);
-        } */
+        }
         // Redirect to app with shop parameter upon auth
-        ctx.redirect(`/?shop=${shop}&host=${host}`);
+        //ctx.redirect(`/?shop=${shop}&host=${host}`);
       },
     })
   );
@@ -71,6 +78,7 @@ app.prepare().then(async () => {
   const handleRequest = async (ctx) => {
     await handle(ctx.req, ctx.res);
     ctx.respond = false;
+    //console.log("the respond is " + JSON.stringify(ctx));
     ctx.res.statusCode = 200;
   };
 
@@ -90,23 +98,22 @@ app.prepare().then(async () => {
       await Shopify.Utils.graphqlProxy(ctx.req, ctx.res);
     }
   );
-  router.get("/", async (ctx) => {
+  /*   router.get("/", async (ctx) => {
     const shop = ctx.query.shop;
-
+    console.log("what shop " + ACTIVE_SHOPIFY_SHOPS[shop]);
     // This shop hasn't been seen yet, go through OAuth to create a session
     if (ACTIVE_SHOPIFY_SHOPS[shop] === undefined) {
       ctx.redirect(`/auth?shop=${shop}`);
     } else {
       await handleRequest(ctx);
     }
-  });
+  }); */
   router.get("(/_next/static/.*)", handleRequest); // Static content is clear
   router.get("/_next/webpack-hmr", handleRequest); // Webpack content is clear
   router.get("(.*)", async (ctx) => {
     const shop = ctx.query.shop;
-
-    // This shop hasn't been seen yet, go through OAuth to create a session
     if (ACTIVE_SHOPIFY_SHOPS[shop] === undefined) {
+      console.log("what shop " + ACTIVE_SHOPIFY_SHOPS[shop]);
       ctx.redirect(`/auth?shop=${shop}`);
     } else {
       await handleRequest(ctx);
